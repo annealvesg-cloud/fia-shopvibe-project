@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS public.pedidos (
+    id UUID PRIMARY KEY,
+    cliente_id VARCHAR(64) NOT NULL,
+    valor NUMERIC(12,2) NOT NULL,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(30) NOT NULL DEFAULT 'CRIADO'
+);
+CREATE PUBLICATION shopvibe_publication FOR TABLE public.pedidos;

@@ -1,0 +1,300 @@
+services:
+  postgres_oltp:
+    image: postgres:15
+    container_name: postgres_oltp
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_DB: shopvibe_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${OLTP_PASSWORD:-senha_oltp}
+    ports: ["5432:5432"]
+    volumes: [oltp_data:/var/lib/postgresql/data, ./postgres_oltp/init:/docker-entrypoint-initdb.d:ro]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shopvibe_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [network_shopvibe]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes: [kafka_data:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+    networks: [network_shopvibe]
+
+  kafka_connect:
+    build:
+      context: ./kafka_connect
+      dockerfile: Dockerfile
+    image: shopvibe-kafka-connect:7.4.0
+    container_name: shopvibe-kafka-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres_oltp:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+      CONNECT_REST_PORT: "8083"
+      CONNECT_GROUP_ID: "shopvibe-connect-group"
+
+      CONNECT_CONFIG_STORAGE_TOPIC: "shopvibe-connect-configs"
+      CONNECT_OFFSET_STORAGE_TOPIC: "shopvibe-connect-offsets"
+      CONNECT_STATUS_STORAGE_TOPIC: "shopvibe-connect-status"
+
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka_connect"
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+    networks:
+      - network_shopvibe
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-02-28T09-55-16Z
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minio_senha123}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio_data:/data]
+    networks: [network_shopvibe]
+
+  minio_init:
+    image: quay.io/minio/mc:RELEASE.2025-04-08T15-39-49Z
+    container_name: minio_init
+    depends_on: [minio]
+    entrypoint: ["/bin/sh", "-c"]
+    command: "until mc alias set shopvibe http://minio:9000 '$$MINIO_ROOT_USER' '$$MINIO_ROOT_PASSWORD'; do sleep 2; done; mc mb --ignore-existing shopvibe/bronze; echo 'Bucket bronze pronto.'"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minio_senha123}
+    networks: [network_shopvibe]
+
+  postgres_antifraude:
+    image: postgres:15
+    container_name: postgres_antifraude
+    environment:
+      POSTGRES_DB: antifraude_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${ANTIFRAUDE_PASSWORD:-senha_antifraude}
+    ports: ["5433:5432"]
+    volumes: [antifraude_data:/var/lib/postgresql/data, ./postgres_antifraude/init:/docker-entrypoint-initdb.d:ro]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d antifraude_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [network_shopvibe]
+
+  python_consumer:
+    build: ./python_consumer
+    container_name: python_consumer
+    depends_on:
+      kafka: {condition: service_healthy}
+      postgres_antifraude: {condition: service_healthy}
+      antifraud_processor: {condition: service_started}
+
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      KAFKA_TOPIC: "shopvibe.public.pedidos"
+      KAFKA_GROUP_ID: "antifraude-group"
+      PGHOST: "postgres_antifraude"
+      PGPORT: "5432"
+      PGDATABASE: "antifraude_db"
+      PGUSER: "postgres"
+      PGPASSWORD: ${ANTIFRAUDE_PASSWORD:-senha_antifraude}   
+      ANTIFRAUD_URL: "http://antifraud_processor:8001/analisar"
+    restart: unless-stopped
+    networks: [network_shopvibe]
+
+  antifraud_processor:
+    build: ./antifraud_processor
+    container_name: antifraud_processor
+    depends_on:
+      postgres_antifraude:
+        condition: service_healthy
+    environment:
+      PGHOST: "postgres_antifraude"
+      PGPORT: "5432"
+      PGDATABASE: "antifraude_db"
+      PGUSER: "postgres"
+      PGPASSWORD: ${ANTIFRAUDE_PASSWORD:-senha_antifraude}
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    networks:
+      - network_shopvibe
+
+  bronze_consumer:
+    build: ./bronze_consumer
+    container_name: bronze_consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+      KAFKA_TOPIC: "shopvibe.public.pedidos"
+      KAFKA_GROUP_ID: "bronze-group"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minio_admin}
+      MINIO_SECRET_KEY: ${MINIO_PASSWORD:-minio_senha123}
+      MINIO_BUCKET: "bronze"
+    restart: unless-stopped
+    networks:
+      - network_shopvibe
+
+  silver_processor:
+    build: ./silver_processor
+    container_name: silver_processor
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minio_admin}
+      MINIO_SECRET_KEY: ${MINIO_PASSWORD:-minio_senha123}
+      BRONZE_BUCKET: "bronze"
+      SILVER_BUCKET: "silver"
+    restart: unless-stopped
+    networks:
+      - network_shopvibe
+
+  gold_processor:
+    build: ./gold_processor
+    container_name: gold_processor
+    depends_on:
+      postgres_analytics:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_USER:-minio_admin}
+      MINIO_SECRET_KEY: ${MINIO_PASSWORD:-minio_senha123}
+      SILVER_BUCKET: "silver"
+
+      PGHOST: "postgres_analytics"
+      PGPORT: "5432"
+      PGDATABASE: "analytics_db"
+      PGUSER: "postgres"
+      PGPASSWORD: ${ANALYTICS_PASSWORD:-senha_analytics}
+    restart: unless-stopped
+    networks:
+      - network_shopvibe
+      
+  postgres_analytics:
+    image: postgres:15
+    container_name: postgres_analytics
+    environment:
+      POSTGRES_DB: analytics_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${ANALYTICS_PASSWORD:-senha_analytics}
+    ports: ["5434:5432"]
+    volumes: [analytics_data:/var/lib/postgresql/data, ./postgres_analytics/init:/docker-entrypoint-initdb.d:ro]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d analytics_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [network_shopvibe]
+
+  fastapi:
+    build: ./fastapi
+    container_name: fastapi
+
+    environment:
+      PGHOST: "postgres_analytics"
+      PGPORT: "5432"
+      PGDATABASE: "analytics_db"
+      PGUSER: "postgres"
+      PGPASSWORD: "senha_analytics"
+
+      ANTIFRAUD_PGHOST: "postgres_antifraude"
+      ANTIFRAUD_PGPORT: "5432"
+      ANTIFRAUD_PGDATABASE: "antifraude_db"
+      ANTIFRAUD_PGUSER: "postgres"
+      ANTIFRAUD_PGPASSWORD: "senha_antifraude"
+
+    depends_on:
+      postgres_analytics:
+        condition: service_healthy
+
+      postgres_antifraude:
+        condition: service_healthy
+
+    ports:
+      - "8000:8000"
+
+    networks:
+      - network_shopvibe
+
+  dash:
+    build: ./dashboard
+    container_name: dash
+    depends_on: [fastapi]
+    environment:
+      API_URL: "http://fastapi:8000"
+    ports: ["8051:8051"]
+    networks: [network_shopvibe]
+
+  antifraud_dashboard:
+    build: ./antifraud_dashboard
+    container_name: antifraud_dashboard
+
+    depends_on:
+      fastapi:
+        condition: service_started
+
+    environment:
+      API_URL: "http://fastapi:8000"
+
+    ports:
+      - "8052:8051"
+
+    restart: unless-stopped
+
+    networks:
+      - network_shopvibe
+
+networks:
+  network_shopvibe:
+    driver: bridge
+volumes:
+  oltp_data:
+  kafka_data:
+  minio_data:
+  antifraude_data:
+  analytics_data:

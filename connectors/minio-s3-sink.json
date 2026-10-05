@@ -1,0 +1,18 @@
+{
+  "name": "minio-s3-sink-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.s3.S3SinkConnector",
+    "topics": "shopvibe.public.pedidos",
+    "s3.bucket.name": "bronze",
+    "store.url": "http://minio:9000",
+    "aws.access.key.id": "minio_admin",
+    "aws.secret.access.key": "minio_senha123",
+    "s3.region": "us-east-1",
+    "storage.class": "io.confluent.connect.s3.storage.S3Storage",
+    "format.class": "io.confluent.connect.s3.format.parquet.ParquetFormat",
+    "flush.size": "1000",
+    "schema.compatibility": "NONE",
+    "partitioner.class": "io.confluent.connect.storage.partitioner.DefaultPartitioner",
+    "tasks.max": "1"
+  }
+}

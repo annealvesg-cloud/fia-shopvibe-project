@@ -1,0 +1,54 @@
+1. Regras da primeira versão
+
+Vou propor estas 5 regras:
+
+Código	Regra	Pontos
+R001	Mais de 5 pedidos em 2 minutos	+400
+R002	Mais de 10 pedidos em 2 minutos	+200
+R003	3 ou mais pedidos em 30 segundos	+100
+R004	Valor > 3× média histórica do cliente	+200
+R005	Primeiro pedido observado do cliente	+100
+
+O score será:
+
+score = soma dos pontos
+
+limitado a:
+
+0 ≤ score ≤ 1000
+Exemplo
+
+Um cliente faz 6 pedidos em 2 minutos e 3 deles em 30 segundos:
+
+R001 = +400
+R003 = +100
+R005 = +100
+----------------
+Score = 600
+
+Resultado:
+
+Score: 600
+Risco: ALTO
+
+Outro cliente:
+
+R001 = +400
+R002 = +200
+R003 = +100
+R004 = +200
+R005 = +100
+----------------
+Score = 1000
+Risco: CRÍTICO
+Faixas
+0 - 299    → BAIXO
+300 - 599  → MÉDIO
+600 - 799  → ALTO
+800 - 1000 → CRÍTICO
+
+E o alerta será gerado quando:
+
+score >= 400
+
+Assim, uma regra isolada de +100 ou +200 não gera alerta, mas várias evidências combinadas podem gerar.

@@ -1,0 +1,15 @@
+{
+"name": "postgres-source",
+"config": {
+"connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+"tasks.max": "1",
+"database.hostname": "postgres_oltp",
+"database.port": "5432",
+"database.user": "postgres",
+"database.password": "senha_oltp",
+"database.dbname": "shopvibe_db",
+"topic.prefix": "shopvibe",
+"schema.include.list": "public",
+"plugin.name": "pgoutput"
+}
+}

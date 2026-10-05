@@ -1,0 +1,17 @@
+{
+  "name": "postgres-debezium-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres_oltp",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "senha_oltp",
+    "database.dbname": "shopvibe_db",
+    "topic.prefix": "shopvibe",
+    "plugin.name": "pgoutput",
+    "publication.name": "shopvibe_publication",
+    "slot.name": "shopvibe_slot",
+    "table.include.list": "public.pedidos",
+    "tombstones.on.delete": "false"
+  }
+}

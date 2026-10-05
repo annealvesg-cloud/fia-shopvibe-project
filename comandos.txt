@@ -1,0 +1,85 @@
+Abrir o postgresSQL
+
+    shopvibe_db:
+
+    docker exec -it postgres_oltp psql -U postgres -d shopvibe_db
+
+    INSERT INTO public.pedidos (id, cliente_id, valor, status)
+    VALUES (
+        gen_random_uuid(),
+        'CLIENTE_CONSUMER_010',
+        160.00,
+        'CRIADO'
+    );
+
+
+    INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 100.00, NOW(), 'APROVADO');
+
+    INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 120.00, NOW(), 'APROVADO');
+
+    INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 150.00, NOW(), 'APROVADO');
+
+    INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 200.00, NOW(), 'APROVADO');
+
+    INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 180.00, NOW(), 'APROVADO');
+
+    INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 250.00, NOW(), 'APROVADO');
+
+
+
+
+    antifraude_db:
+
+    docker exec -it postgres_antifraude psql -U postgres -d antifraude_db
+
+    SELECT pedido_id, cliente_id, valor, motivo, score, detectado_em
+    FROM transacoes_suspeitas
+    ORDER BY id DESC
+    LIMIT 10;
+
+
+    analytics_db:
+
+    docker exec -it postgres_analytics psql -U postgres -d analytics_db
+
+    SELECT
+    pedido_id,
+    cliente_id,
+    valor,
+    status,
+    criado_em,
+    source_ts
+    FROM gold_pedidos
+    ORDER BY criado_em;
+
+    SELECT *
+    FROM gold_indicadores_diarios
+    ORDER BY data;
+
+    SELECT *
+    FROM gold_processamento
+    ORDER BY processado_em;
+
+
+Abrir o Minio:
+    http://localhost:9001/login
+
+
+FastAPI:
+
+    Camada GOLD
+    GET: http://localhost:8000/resumo
+    GET: http://localhost:8000/pedidos
+    GET: http://localhost:8000/resumo
+    GET: http://localhost:8000/indicadores
+
+    Antrifraude
+    GET: http://localhost:8000/antifraude/resumo
+    GET: http://localhost:8000/antifraude/alertas
+    GET: http://localhost:8000/antifraude/indicadores

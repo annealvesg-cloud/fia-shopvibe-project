@@ -1,0 +1,2 @@
+kafka-python==2.2.15
+minio==7.2.15
