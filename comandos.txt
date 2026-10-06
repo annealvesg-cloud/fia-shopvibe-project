@@ -2,6 +2,7 @@
 subir ambiente:
 
     --docker compose down
+    --docker compose up -d --build --force-recreate minio_init
     docker compose build --no-cache
     docker compose up -d
 
@@ -32,31 +33,32 @@ shopvibe_db (banco de aplicação):
     INSERT INTO public.pedidos (id, cliente_id, valor, status)
     VALUES (
         gen_random_uuid(),
-        'CLIENTE_CONSUMER_011',
-        640.00,
+        'CLIENTE_CONSUMER_013',
+        800.00,
         'NOVO'
     );
 
 
     INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
-    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 100.00, NOW(), 'APROVADO');
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_021', 500.00, NOW(), 'NOVO');
 
     INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
-    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 120.00, NOW(), 'APROVADO');
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_021', 120.00, NOW(), 'NOVO');
 
     INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
-    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 150.00, NOW(), 'APROVADO');
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_021', 150.00, NOW(), 'NOVO');
 
     INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
-    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 200.00, NOW(), 'APROVADO');
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_021', 200.00, NOW(), 'NOVO');
 
     INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
-    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 180.00, NOW(), 'APROVADO');
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_021', 180.00, NOW(), 'NOVO');
 
     INSERT INTO pedidos (id, cliente_id, valor, criado_em, status)
-    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_001', 250.00, NOW(), 'APROVADO');
+    VALUES (gen_random_uuid(), 'CLIENTE_FRAUDE_020', 250.00, NOW(), 'NOVO');
 
 
+    SELECT * FROM public.pedidos WHERE cliente_id = 'CLIENTE_FRAUDE_001' ORDER BY criado_em DESC;
 
 antifraude_db:
 
