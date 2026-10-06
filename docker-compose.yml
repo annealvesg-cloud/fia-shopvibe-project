@@ -80,7 +80,7 @@ services:
       - network_shopvibe
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-02-28T09-55-16Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: minio
     command: server /data --console-address ":9001"
     environment:
@@ -91,7 +91,7 @@ services:
     networks: [network_shopvibe]
 
   minio_init:
-    image: quay.io/minio/mc:RELEASE.2025-04-08T15-39-49Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: minio_init
     depends_on: [minio]
     entrypoint: ["/bin/sh", "-c"]

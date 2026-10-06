@@ -1,0 +1,450 @@
+1. PostgreSQL OLTP — camada operacional
+
+Por que utilizar?
+
+É o banco responsável pelo funcionamento do sistema transacional.
+
+Aqui ficam os dados originais e operacionais, por exemplo:
+
+pedidos
+clientes
+transações
+Justificativa
+
+O OLTP é otimizado para operações como:
+
+INSERT
+UPDATE
+DELETE
+consultas transacionais
+consistência dos dados
+
+Não é interessante colocar os processos analíticos diretamente sobre esse banco, porque consultas pesadas poderiam prejudicar o sistema operacional.
+
+Papel na arquitetura:
+
+Ser a fonte oficial dos dados transacionais da aplicação.
+
+2. Debezium — CDC
+Por que utilizar CDC?
+
+Em vez de ficar consultando o PostgreSQL constantemente para descobrir o que mudou, utilizamos Change Data Capture.
+
+O Debezium captura eventos como:
+
+INSERT
+UPDATE
+DELETE
+
+e os transforma em eventos de mudança.
+
+Vantagens
+Não precisa fazer polling no banco.
+Reduz consultas desnecessárias no OLTP.
+Permite processamento quase em tempo real.
+Mantém informações sobre as alterações.
+Desacopla o sistema operacional dos consumidores.
+
+Papel:
+
+Capturar as mudanças do OLTP e disponibilizá-las como eventos.
+
+3. Kafka — camada de eventos
+
+O Kafka é o barramento de eventos da arquitetura.
+
+Ele recebe os eventos do Debezium:
+
+PostgreSQL
+     ↓
+  Debezium
+     ↓
+    Kafka
+
+Por exemplo:
+
+shopvibe.public.pedidos
+Por que Kafka?
+
+Porque podemos ter vários consumidores independentes:
+
+                  Kafka
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+  bronze_consumer       python_consumer
+          │                   │
+          ▼                   ▼
+      Data Lake            Antifraude
+
+Isso permite que um novo consumidor seja criado sem alterar o sistema transacional.
+
+Papel:
+
+Desacoplar produtores e consumidores e permitir processamento distribuído de eventos.
+
+4. Bronze — MinIO
+
+A Bronze é a primeira camada do Data Lake.
+
+Aqui armazenamos os dados brutos, próximos daquilo que veio do Kafka.
+
+Exemplo:
+
+MinIO
+└── bronze
+    └── shopvibe
+        └── public
+            └── pedidos
+Por que guardar os dados brutos?
+
+Principalmente por rastreabilidade e reprocessamento.
+
+Imagine que amanhã descobrimos que uma regra da Silver estava errada.
+
+Podemos fazer:
+
+Bronze
+   ↓
+Silver novamente
+   ↓
+Gold novamente
+
+sem precisar buscar novamente os dados no sistema operacional.
+
+Papel:
+
+Servir como histórico bruto e fonte de reprocessamento.
+
+5. Silver — MinIO + Parquet
+
+A Silver é a camada de dados tratados.
+
+Aqui fazemos coisas como:
+
+padronização;
+conversão de tipos;
+tratamento de timestamps;
+tratamento de registros CDC;
+identificação de exclusões;
+organização por partições;
+preparação para processamento analítico.
+
+Exemplo que temos no projeto:
+
+silver/shopvibe/public/pedidos/
+    year=2026/
+        month=10/
+            day=05/
+                partition=0
+Por que Parquet?
+
+Porque o Parquet é adequado para processamento analítico:
+
+formato colunar;
+compressão;
+leitura eficiente de colunas;
+bom desempenho para grandes volumes;
+integração com ferramentas de Data Lake.
+Papel:
+
+Transformar dados brutos em dados confiáveis e estruturados para processamento analítico.
+
+6. Gold — PostgreSQL Analytics
+
+Aqui temos uma decisão importante do projeto.
+
+A Gold não está no mesmo PostgreSQL do OLTP.
+
+Temos um PostgreSQL separado:
+
+postgres_analytics
+Por quê?
+
+Porque a Gold representa dados já preparados para consumo analítico.
+
+Por exemplo:
+
+gold_pedidos
+gold_indicadores_diarios
+gold_processamento
+
+São dados mais próximos daquilo que o negócio realmente precisa consultar.
+
+Por que PostgreSQL?
+
+Porque a Gold precisa ser consumida facilmente por:
+
+APIs;
+dashboards;
+ferramentas analíticas;
+consultas SQL;
+relatórios.
+
+Não precisamos obrigatoriamente acessar arquivos Parquet diretamente para cada consulta do dashboard.
+
+Papel:
+
+Disponibilizar dados analíticos estruturados e de fácil consumo.
+
+7. PostgreSQL Antifraude
+
+Essa é uma camada separada da Gold.
+
+Isso é importante.
+
+O antifraude possui uma necessidade diferente do Analytics.
+
+Enquanto o Analytics responde:
+
+"O que aconteceu?"
+
+o antifraude responde:
+
+"Essa transação apresenta comportamento suspeito?"
+
+O banco antifraude atualmente possui:
+
+transacoes_suspeitas
+Por que outro banco?
+
+Para separar:
+
+Analytics
+       ≠
+Antifraude
+
+Isso evita que o processamento analítico interfira no processamento de risco.
+
+Além disso, permite que o antifraude evolua independentemente.
+
+Papel:
+
+Persistir os resultados das análises antifraude e os alertas gerados.
+
+8. python_consumer — consumidor antifraude
+
+Esse componente recebe os eventos do Kafka.
+
+Kafka
+  ↓
+python_consumer
+
+Ele não decide se uma transação é fraude.
+
+Ele funciona como uma ponte:
+
+Kafka
+   ↓
+python_consumer
+   ↓ HTTP
+antifraud_processor
+Por que separar?
+
+Porque isso mantém responsabilidades bem definidas.
+
+O consumer é responsável por:
+
+consumir Kafka;
+interpretar o evento;
+encaminhar o evento.
+
+O motor antifraude é responsável por:
+
+aplicar regras;
+calcular score;
+determinar risco;
+gerar alerta.
+Papel:
+
+Fazer a ponte entre o streaming Kafka e o processamento antifraude.
+
+9. antifraud_processor — motor antifraude
+
+Essa é uma das partes mais importantes do projeto.
+
+Ele recebe a transação e calcula:
+
+Score = 0–1000
+
+Atualmente temos regras como:
+
+R001 → frequência de pedidos
+R002 → volume elevado
+R003 → concentração temporal
+R004 → valor fora do histórico
+R005 → primeiro pedido
+
+Depois temos:
+
+Score
+   ↓
+Classificação
+0–299      BAIXO
+300–599    MÉDIO
+600–799    ALTO
+800–1000   CRÍTICO
+Por que separar o motor?
+
+Porque futuramente podemos substituir ou complementar as regras por:
+
+Regras
+   +
+Machine Learning
+   +
+Histórico
+   +
+Características da transação
+
+sem precisar alterar Kafka, OLTP ou Dash.
+
+Papel:
+
+Transformar eventos transacionais em decisões de risco.
+
+10. FastAPI — camada de serviços
+
+O FastAPI funciona como camada intermediária entre dados e aplicações consumidoras.
+
+Por exemplo:
+
+PostgreSQL Analytics
+        ↓
+      FastAPI
+        ↓
+      Dash
+
+e:
+
+PostgreSQL Antifraude
+        ↓
+      FastAPI
+        ↓
+Dash Antifraude
+Por que não deixar o Dash acessar o banco?
+
+Porque isso criaria um acoplamento:
+
+Dash → Banco
+
+Em vez disso:
+
+Dash → API → Banco
+
+Isso facilita:
+
+segurança;
+controle de acesso;
+reutilização;
+criação de outros consumidores;
+evolução do banco sem quebrar o frontend.
+Papel:
+
+Expor os dados por meio de uma interface de serviços padronizada.
+
+11. Dash Analytics
+
+O Dash é a camada de visualização analítica.
+
+Ele apresenta:
+
+pedidos;
+valores;
+ticket médio;
+indicadores;
+evolução diária;
+tabelas.
+
+Fluxo:
+
+PostgreSQL Analytics
+        ↓
+      FastAPI
+        ↓
+   Dash Analytics
+Papel:
+
+Transformar dados analíticos em informação visual para tomada de decisão.
+
+12. Dash Antifraude
+
+É um dashboard especializado em risco.
+
+Ele apresenta:
+
+Alertas
+Clientes suspeitos
+Valor suspeito
+Score médio
+Maior score
+Alertas por dia
+Distribuição de risco
+
+E estamos evoluindo para apresentar também a descrição:
+
+BAIXO
+0–299
+Baixo indício de fraude
+
+MÉDIO
+300–599
+Comportamento que merece atenção
+
+ALTO
+600–799
+Forte indício de comportamento suspeito
+
+CRÍTICO
+800–1000
+Elevado risco de fraude
+Papel:
+
+Dar visibilidade operacional aos resultados do motor antifraude.
+
+13. Docker
+
+O Docker não é exatamente uma camada de dados, mas é fundamental para a arquitetura.
+
+Cada componente pode funcionar isoladamente:
+
+┌─────────────────────────────────┐
+│          Docker Compose         │
+├─────────────────────────────────┤
+│ PostgreSQL OLTP                 │
+│ Kafka                           │
+│ Debezium                        │
+│ MinIO                           │
+│ Consumers                       │
+│ Processors                      │
+│ PostgreSQL Analytics            │
+│ PostgreSQL Antifraude           │
+│ FastAPI                         │
+│ Dash                            │
+└─────────────────────────────────┘
+Por que utilizar?
+ambiente reproduzível;
+isolamento;
+configuração centralizada;
+facilidade de desenvolvimento;
+facilidade de implantação;
+cada serviço possui seu próprio ambiente.
+🎯 Resumo executivo
+
+Se você precisar explicar a arquitetura em uma apresentação ou entrevista, eu resumiria assim:
+
+O PostgreSQL OLTP é responsável pelas operações transacionais. O Debezium captura as alterações por CDC e as publica no Kafka, que funciona como barramento de eventos. A partir do Kafka, os dados seguem para dois fluxos independentes: o fluxo analítico, que utiliza Bronze, Silver e Gold, e o fluxo antifraude, responsável pela análise em tempo quase real. A Bronze preserva os dados brutos para rastreabilidade e reprocessamento; a Silver trata e padroniza os dados; e a Gold disponibiliza dados agregados para consumo analítico. Paralelamente, o motor antifraude aplica regras e calcula um score de 0 a 1000, persistindo os alertas em um PostgreSQL dedicado. O FastAPI desacopla os bancos das aplicações consumidoras, e os dashboards Dash apresentam os resultados de Analytics e Antifraude para os usuários.
+
+A principal justificativa da arquitetura
+
+O ponto mais forte do desenho é o desacoplamento:
+
+              ┌──────────── ANALYTICS ────────────┐
+              │                                   │
+OLTP → CDC → Kafka ──→ Bronze → Silver → Gold → API → Dash
+              │
+              │
+              └──────────── ANTIFRAUDE ──────────┐
+                                                  │
+                         python_consumer → Motor → PostgreSQL → API → Dash
+
+Assim, Analytics e Antifraude podem evoluir de forma independente, mas utilizam a mesma origem de eventos. Essa é uma justificativa arquitetural bastante sólida para o projeto.

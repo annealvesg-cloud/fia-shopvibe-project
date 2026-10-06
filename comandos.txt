@@ -1,15 +1,40 @@
-Abrir o postgresSQL
 
-    shopvibe_db:
+subir ambiente:
+
+    --docker compose down
+    docker compose build --no-cache
+    docker compose up -d
+
+    docker compose ps
+    
+    NAME                    STATUS
+    postgres_oltp           Up
+    postgres_analytics      Up
+    postgres_antifraude     Up
+    kafka                   Up
+    kafka_connect            Up
+    minio                   Up
+    minio_init               Up/Exited
+    bronze_consumer          Up
+    silver_processor         Up
+    gold_processor           Up
+    python_consumer          Up
+    antifraud_processor      Up
+    fastapi                  Up
+    dash                     Up
+    antifraud_dashboard      Up
+
+
+shopvibe_db (banco de aplicação):
 
     docker exec -it postgres_oltp psql -U postgres -d shopvibe_db
 
     INSERT INTO public.pedidos (id, cliente_id, valor, status)
     VALUES (
         gen_random_uuid(),
-        'CLIENTE_CONSUMER_010',
-        160.00,
-        'CRIADO'
+        'CLIENTE_CONSUMER_011',
+        640.00,
+        'NOVO'
     );
 
 
@@ -33,8 +58,7 @@ Abrir o postgresSQL
 
 
 
-
-    antifraude_db:
+antifraude_db:
 
     docker exec -it postgres_antifraude psql -U postgres -d antifraude_db
 
@@ -44,7 +68,8 @@ Abrir o postgresSQL
     LIMIT 10;
 
 
-    analytics_db:
+
+analytics_db (camada gold):
 
     docker exec -it postgres_analytics psql -U postgres -d analytics_db
 
@@ -67,7 +92,7 @@ Abrir o postgresSQL
     ORDER BY processado_em;
 
 
-Abrir o Minio:
+Abrir o Minio (camada bronze/silver):
     http://localhost:9001/login
 
 
@@ -83,3 +108,7 @@ FastAPI:
     GET: http://localhost:8000/antifraude/resumo
     GET: http://localhost:8000/antifraude/alertas
     GET: http://localhost:8000/antifraude/indicadores
+
+Dash:
+    Analytics - http://localhost:8051/
+    Antifraude - http://localhost:8052/

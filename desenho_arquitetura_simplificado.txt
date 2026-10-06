@@ -1,0 +1,99 @@
+                         ┌──────────────────────────┐
+                         │       PostgreSQL OLTP    │
+                         │                          │
+                         │  pedidos                 │
+                         │  clientes / transações   │
+                         └────────────┬─────────────┘
+                                      │
+                                      │ CDC
+                                      ▼
+                         ┌──────────────────────────┐
+                         │   Debezium / Kafka       │
+                         │      Connect             │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+                         ┌──────────────────────────┐
+                         │          Kafka           │
+                         │                          │
+                         │ shopvibe.public.pedidos  │
+                         └────────────┬─────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    │                                   │
+                    ▼                                   ▼
+          ┌───────────────────┐              ┌───────────────────┐
+          │  python_consumer  │              │ bronze_consumer   │
+          │                   │              │                   │
+          │ Kafka Consumer    │              │ Kafka Consumer    │
+          │ Antifraude        │              │ Data Lake         │
+          └─────────┬─────────┘              └─────────┬─────────┘
+                    │                                   │
+                    │ HTTP                              │
+                    ▼                                   ▼
+          ┌───────────────────┐              ┌───────────────────┐
+          │ antifraud_        │              │       MinIO       │
+          │ processor         │              │                   │
+          │                   │              │      BRONZE       │
+          │ Regras            │              └─────────┬─────────┘
+          │ Score 0–1000      │                        │
+          │ Risco             │                        ▼
+          │                   │              ┌───────────────────┐
+          └─────────┬─────────┘              │ silver_processor  │
+                    │                        │                   │
+                    │                        │ Transformações    │
+                    ▼                        └─────────┬─────────┘
+          ┌───────────────────┐                        │
+          │ PostgreSQL        │                        ▼
+          │ Antifraude        │              ┌───────────────────┐
+          │                   │              │       MinIO       │
+          │ transacoes_       │              │                   │
+          │ suspeitas         │              │      SILVER       │
+          └─────────┬─────────┘              └─────────┬─────────┘
+                    │                                  │
+                    │                                  ▼
+                    │                        ┌───────────────────┐
+                    │                        │  gold_processor   │
+                    │                        │                   │
+                    │                        │ Agregações        │
+                    │                        └─────────┬─────────┘
+                    │                                  │
+                    │                                  ▼
+                    │                        ┌───────────────────┐
+                    │                        │ PostgreSQL        │
+                    │                        │ Analytics         │
+                    │                        │                   │
+                    │                        │ GOLD              │
+                    │                        │ gold_pedidos      │
+                    │                        │ gold_indicadores  │
+                    │                        └─────────┬─────────┘
+                    │                                  │
+                    │                                  │
+                    └──────────────┐        ┌──────────┘
+                                   │        │
+                                   ▼        ▼
+                           ┌─────────────────────┐
+                           │      FastAPI        │
+                           │                     │
+                           │ /pedidos            │
+                           │ /indicadores        │
+                           │ /resumo             │
+                           │                     │
+                           │ /antifraude/resumo  │
+                           │ /antifraude/alertas │
+                           │ /antifraude/        │
+                           │ indicadores         │
+                           └──────────┬──────────┘
+                                      │
+                         ┌────────────┴─────────────┐
+                         │                          │
+                         ▼                          ▼
+              ┌──────────────────┐       ┌────────────────────┐
+              │ Dash Analytics   │       │ Dash Antifraude    │
+              │                  │       │                    │
+              │ Porta 8051       │       │ Porta 8052         │
+              │                  │       │                    │
+              │ Pedidos          │       │ Alertas            │
+              │ Valores          │       │ Score 0–1000       │
+              │ Indicadores      │       │ Nível de risco     │
+              └──────────────────┘       └────────────────────┘
