@@ -88,18 +88,38 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minio_senha123}
     ports: ["9000:9000", "9001:9001"]
     volumes: [minio_data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks: [network_shopvibe]
 
   minio_init:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     container_name: minio_init
-    depends_on: [minio]
-    entrypoint: ["/bin/sh", "-c"]
-    command: "until mc alias set shopvibe http://minio:9000 '$$MINIO_ROOT_USER' '$$MINIO_ROOT_PASSWORD'; do sleep 2; done; mc mb --ignore-existing shopvibe/bronze; echo 'Bucket bronze pronto.'"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      USER_ADMIN=$${MINIO_USER:-minio_admin};
+      PASS_ADMIN=$${MINIO_PASSWORD:-minio_senha123};
+      
+      echo 'Aguardando inicializacao completa do MinIO...';
+      until mc alias set shopvibe http://minio:9000 \"$$USER_ADMIN\" \"$$PASS_ADMIN\" --api S3v4; do
+        sleep 2;
+      done;
+      
+      mc mb --ignore-existing shopvibe/bronze;
+      mc mb --ignore-existing shopvibe/silver;
+      echo 'Buckets bronze e silver criados com sucesso.';
+      "
     environment:
-      MINIO_ROOT_USER: ${MINIO_USER:-minio_admin}
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minio_senha123}
-    networks: [network_shopvibe]
+      MINIO_USER: ${MINIO_USER:-minio_admin}
+      MINIO_PASSWORD: ${MINIO_PASSWORD:-minio_senha123}
+    networks:
+      - network_shopvibe
 
   postgres_antifraude:
     image: postgres:15
