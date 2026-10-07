@@ -16,7 +16,7 @@ def get_connection():
         port=os.getenv("PGPORT", "5432"),
         database=os.getenv("PGDATABASE", "analytics_db"),
         user=os.getenv("PGUSER", "postgres"),
-        password=os.getenv("PGPASSWORD", "senha_analytics")
+        password=os.getenv("PGPASSWORD", "Analytics123")
     )
 
 def get_antifraud_connection():
@@ -27,7 +27,7 @@ def get_antifraud_connection():
         user=os.getenv("ANTIFRAUD_PGUSER", "postgres"),
         password=os.getenv(
             "ANTIFRAUD_PGPASSWORD",
-            "senha_antifraude"
+            "Antifraude123"
         )
     )
 

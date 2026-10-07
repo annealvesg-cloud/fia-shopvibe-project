@@ -260,13 +260,13 @@ services:
       PGPORT: "5432"
       PGDATABASE: "analytics_db"
       PGUSER: "postgres"
-      PGPASSWORD: "senha_analytics"
+      PGPASSWORD: "Analytics123"
 
       ANTIFRAUD_PGHOST: "postgres_antifraude"
       ANTIFRAUD_PGPORT: "5432"
       ANTIFRAUD_PGDATABASE: "antifraude_db"
       ANTIFRAUD_PGUSER: "postgres"
-      ANTIFRAUD_PGPASSWORD: "senha_antifraude"
+      ANTIFRAUD_PGPASSWORD: "Antifraude123"
 
     depends_on:
       postgres_analytics:
