@@ -53,7 +53,7 @@
                     │                                  │
                     │                                  ▼
                     │                        ┌───────────────────┐
-                    │                        │  gold_processor   │
+                    │                        │  golden_processor │
                     │                        │                   │
                     │                        │ Agregações        │
                     │                        └─────────┬─────────┘

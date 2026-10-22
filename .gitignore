@@ -1,1 +1,3 @@
 .env\n__pycache__/\n*.py[cod]\n.venv/\n
+score_antifraude.txt
+justificativa_componentes.txt
